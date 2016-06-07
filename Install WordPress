@@ -1,0 +1,52 @@
+Now that we have our web server set up with PHP processing and we have a database server, we need to install an application to take advantage of this and connect out to our database. As you know by now, we're using WordPress to demo this functionality in this tutorial.
+
+Download the latest WordPress tarball to your home directory:
+
+cd ~
+wget http://wordpress.org/latest.tar.gz
+Extract the files, which will create a directory called "wordpress" in your home directory:
+
+tar xzvf latest.tar.gz
+WordPress includes a sample configuration file, but it is not in place out-of-the-box. We will rename this file so that it will be read correctly and then we can open it in our text editor to make our changes:
+
+cp ~/wordpress/wp-config-sample.php ~/wordpress/wp-config.php
+nano ~/wordpress/wp-config.php
+Inside, we need to enter the correct values for our remote database. Remember to use the same IP address you used in your remote database test earlier.
+
+/** The name of the database for WordPress */
+define('DB_NAME', 'wordpress');
+
+/** MySQL database username */
+define('DB_USER', 'wordpressuser');
+
+/** MySQL database password */
+define('DB_PASSWORD', 'password');
+
+/** MySQL hostname */
+define('DB_HOST', 'database_server_ip');
+Close the file when you are finished. This is actually the only part of the entire configuration that explicitly links our web server and database server.
+
+Next, we'll need to create the directory structure that we set up in our Nginx server block configuration. If you recall, I'm using "example.com" for my demonstration, but you should use whatever you specified in your Nginx configuration:
+
+sudo mkdir -p /var/www/example.com
+We will then copy the files and directories found in our ~/wordpress directory to the new document root that we just created:
+
+sudo cp -r ~/wordpress/* /var/www/example.com
+Now all of our files are in place. The only thing left to do is modify our permissions and file ownership a little bit. We should start by moving into our server's document root:
+
+cd /var/www/example.com
+We are going to give all of the files in this directory to our web server user, which is called www-data:
+
+sudo chown -R www-data:www-data *
+We still want to be able to edit these files as our normal, non-root user though, so we can add our regular, non-root account on our web server to the web server group. We can then give that group permissions to modify files in this directory:
+
+sudo usermod -a -G www-data your_user
+sudo chmod -R g+rw /var/www/example.com
+Set Up the Site through the Web Interface
+Now, all you need to do is complete the installation through the web interface.
+
+Navigate to your domain name (or public IP address) associated with your web server:
+
+http://example.com
+You should see the WordPress installation screen where you need to fill out your relevant information:
+https://assets.digitalocean.com/articles/wp_remote_db/admin_setup.png
