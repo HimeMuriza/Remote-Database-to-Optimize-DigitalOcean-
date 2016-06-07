@@ -1,0 +1,32 @@
+Now that we have verified that our web server can access the WordPress database, we need to actually make this a web server by configuring Nginx, PHP and the necessary components.
+
+Since you updated your package index to run the test above, we don't need to do that again. Let's install all of the packages we need:
+
+sudo apt-get install nginx php5-fpm php5-mysql
+When everything is installed, you can begin configuring the software.
+
+Configure PHP
+
+Let's begin with PHP since that is quite easy.
+
+Open the PHP configuration file for php-fpm, which will handle our dynamic content. We just need to modify one value in this:
+
+sudo nano /etc/php5/fpm/php.ini
+Search for the cgi.fix_pathinfo parameter. It will likely be commented out with the ";" character and set to "1". We need to reverse both of these conditions by uncommenting the line and setting it to "0":
+
+cgi.fix_pathinfo=0
+This is a security measure. By setting this option, we tell PHP not to try to guess the file that the user was trying to access if an exact match is not found. If we didn't set this, a malicious user could take advantage of this opportunity and get our server to execute code that we don't want it to.
+
+Save and close the file when you are finished.
+
+Next, we'll need to open another file to modify how our PHP processor and web server communicate:
+
+sudo nano /etc/php5/fpm/pool.d/www.conf
+Look for the listen directive, which should be set to 127.0.0.1:9000. Rather than using a port, we're going to set this to a unix domain socket:
+
+listen = /var/run/php5-fpm.sock
+Save and close the file when you are finished.
+
+Now that we have our values, restart our PHP processor:
+
+sudo service php5-fpm restart
