@@ -1,0 +1,58 @@
+Now we're ready to configure Nginx. We can start by copying the default virtual host file to a new file that we can work with. We'll name this after the domain of our site. I'm going to use the placeholder "example.com":
+
+sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/example.com
+Now, open the file we just copied over:
+
+sudo nano /etc/nginx/sites-available/example.com
+Inside, we'll modify our server block (the sections contained within the server brackets). Begin by uncommenting the directive to listen to port 80. We're also going to change the root directory and make Nginx serve a PHP index file by default:
+
+server {
+    listen 80;
+    root /var/www/example.com;
+    index index.php index.hmtl index.htm;
+Next, we'll modify the server_name directive to use our domain name, ensure that our try_files is set up correctly (passing requests to PHP if no files are found) and that our error pages are configured:
+
+server {
+    listen 80;
+    root /var/www/example.com;
+    index index.php index.hmtl index.htm;
+    server_name example.com;
+    location / {
+        try_files $uri $uri/ /index.php?q=$uri&$args;
+    }
+    error_page 404 /404.html;
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/www;
+    }
+Finally, we need to set up the actual PHP processing by using a location block that will match all of our PHP requests. We will immediately return a 404 if an exact match is not found. We'll also use the socket we configured for PHP:
+
+server {
+    listen 80;
+    root /var/www/example.com;
+    index index.php index.hmtl index.htm;
+    server_name example.com;
+    location / {
+        try_files $uri $uri/ /index.php?q=$uri&$args;
+    }
+    error_page 404 /404.html;
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/www;
+    }
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_pass unix:/var/run/php5-fpm.sock;
+        fastcgi_index index.php;
+        include fastcgi_params;
+    }
+}
+This is the end of our server block configuration. Save and close the file.
+
+Now, we link this to our "enabled" directory and remove the link for the default server block file:
+
+sudo rm /etc/nginx/sites-enabled/default
+sudo ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
+Restart Nginx to make these changes happen:
+
+sudo service nginx restart
