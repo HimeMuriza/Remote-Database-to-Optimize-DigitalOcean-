@@ -1,0 +1,129 @@
+As your application or website grows, you may come to the point where you've outgrown your current setup. If you are currently hosting your web server and database backend on the same VPS, a good idea may be to separate these two functions so that each can operate and grow on its own machine.
+
+In this guide, we'll discuss how to configure a remote database server that your web server can connect to for dynamic content. We will be using WordPress as an example so that we have something to work with. We'll configure Nginx on our web server and then connect it to a MySQL database on a remote machine. We'll be doing all of this on an Ubuntu 12.04 VPS instance for our demo.
+
+Install MySQL on the Database Server
+To get started, we'll configure one VPS instance as the MySQL server. Having our data stored on a separate computer is a good way to expand gracefully when you've hit the ceiling on a one-machine configuration. It also provides the basic structure necessary to load balance and expand your set up even more at a later time.
+
+To get started, we'll need to install some basic packages on our database server. These will basically be most of the same steps you'd take for setting up a database for a traditional LEMP stack, but we won't need all of the components (some will be on the other server).
+
+Start off by updating your package cache and installing the MySQL server:
+
+sudo apt-get update
+sudo apt-get install mysql-server
+You will be asked to select and confirm a root password for MySQL during the installation procedure.
+
+When you are finished, you need to run the database installation command, which will generate the appropriate directory structure to manage your components.
+
+sudo mysql_install_db
+Afterwards, we should tighten up security a little bit by running a script that will ask us about disabling some insecure defaults:
+
+sudo mysql_secure_installation
+You will have to enter the MySQL administrator's password that you set in the steps above. Afterwards, it will ask if you want to change that password. Type "N" for no if you're happy with your current password.
+
+To all of the additional questions, you should just hit ENTER to select the default options which will remove some test databases and lock down access.
+
+Configure MySQL to Allow Remote Access
+Now that you have your database up and running, we need to change some values to allow connections from other computers.
+
+Open up the main configuration file for MySQL with root privileges in your editor:
+
+sudo nano /etc/mysql/my.cnf
+This file is divided into sections denoted by words in brackets ([ and ]). Find the section labeled mysqld:
+
+[mysqld]
+Within this section (in the area between this tag and the next section marker), you'll need to find a parameter called bind-address. This basically tells the database software which network address to listen to connections on.
+
+Currently, MySQL is configured to only look for connections from its own computer. We need to change that to reference an external IP address that your server can be reached at.
+
+If you are hosting this in a datacenter with private networking capabilities, use your server's private network IP. Otherwise, you can use the public IP address here:
+
+bind-address        = your_database_IP
+Save and close the file when you are finished.
+
+To force MySQL to read the new change that we've just implemented, we can restart the database:
+
+sudo service mysql restart
+Set Up Remote WordPress Credentials and Database
+Now that we have MySQL configured listening on an external address, we need to create a database and establish a remote user. Even though MySQL itself is now listening on an IP address that other machines can connect to, there are not currently any databases that it can access.
+
+This is also an opportunity for us to establish different privileges based on where a user is connecting from. We can create two "users" that can actually just be the same username, but associated with different hosts.
+
+What I mean by this is that we can create a user that is bound to the database server itself and grant it very broad permissions. We can then use the same username, but associated with our web server and give it only the permissions that WordPress requires.
+
+This will allow us to do heavy duty work while logged into our database server, while only providing our web server with the bare minimum of permissions it needs to accomplish its job. This is a good security policy that will partially shield the database server in the event that the web server is compromised.
+
+Begin by connecting to MySQL using the root account and administrative password you configured:
+
+mysql -u root -p
+You will be asked for your MySQL root password and then you'll be given a MySQL prompt.
+
+To get this started, let's create the database that WordPress will use. We will just call this wordpress so that we can easily identify it in later:
+
+CREATE DATABASE wordpress;
+Now that we have a database, we need to create our local user, which will be used to do more intense database operations if ever need be. We will call this user wordpressuser and make this account only match connection attempts originating from the database server itself by using localhost in the declaration:
+
+CREATE USER 'wordpressuser'@'localhost' IDENTIFIED BY 'password';
+Let's go ahead and grant this account full access to our database:
+
+GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpressuser'@'localhost';
+This user can now do any operation on the database for WordPress, but this account cannot be used remotely, as it only matches connections from the local machine.
+
+Let's create a companion account that will match connections exclusively from our web server. For this, you'll need your web server's IP address. We could name this account anything, but for a more consistent experience, we're going to use the exact same username as we did above, with only the host portion modified.
+
+Keep in mind that you must use an IP address that utilizes the same network that you configured in your my.cnf file. This means that if you used a private networking IP, you'll want to create the rule below to use the private IP of your web server. If you configured MySQL to use the public internet, you should match that with the web server's public IP address.
+
+CREATE USER 'wordpressuser'@'web_server_IP' IDENTIFIED BY 'password';
+Now that we have our remote account, we can give it the subset of available privileges that WordPress requires to operate under normal circumstances. These are select, delete, insert, and update.
+
+While this is the final goal, we are actually not able to implement this at this point. This is because during certain operations, you will have to adjust permissions temporarily to allow more access. One of these is actually the initial installation. It is easiest to just grant all privileges at the moment and then we will restrict them after we are finished with the installation.
+
+For reference, the command we will be using to lock down the account (don't worry, we will give you this command again when you need it) is this:
+
+GRANT SELECT,DELETE,INSERT,UPDATE ON wordpress.* TO 'wordpressuser'@'web_server_ip';
+But for now, we will temporarily grant all privileges, which makes it effectively identical to the local account for the time being:
+
+GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpressuser'@'web_server_ip';
+We will come back to this after we have configured WordPress. If you are not actually installing WordPress and are using this guide simply to learn how to separate your web server from your database, you may be able to use the more restrictive settings now. It depends on your web application, so look up the minimum database privileges needed for your application.
+
+Flush the privileges to write them to disk and begin using them:
+
+FLUSH PRIVILEGES;
+Now, you can exit the MySQL prompt by typing:
+
+exit
+Test Remote and Local Connections
+Before we continue, it's best to verify that you can connect to your database from both the local machine and from your web server using the wordpressuser accounts.
+
+First, test the connection from your database machine by attempting to log in with our new account:
+
+mysql -u wordpressuser -p
+Type in the password that you set up for this account when prompted.
+
+If you are given a MySQL prompt, then the local connection was successful. You can exit out again by typing:
+
+exit
+Log into your web server to test remote connections.
+
+On your web server, you'll need to install some client tools for MySQL in order to access the remote database. Update your local package cache, and then install the client utilities:
+
+sudo apt-get update
+sudo apt-get install mysql-client
+Now, we can connect to our database server using the following syntax:
+
+mysql -u wordpressuser -h database_server_IP -p
+Again, you must make sure that you are using the correct IP address for the database server. If you configured MySQL to listen on the private network, enter your database's private network IP, otherwise enter your database server's public IP address.
+
+You should be asked for the password for your wordpressuser account, and if all went well, you should be given a MySQL prompt.
+
+If this is successful, then you can go ahead and exit out of the prompt, as you've now verified that you can connect remotely.
+
+For an additional check, you can try doing the same thing from a third server to make sure that this other server is not granted access. You have verified local access and access from the web server, but you have not verified that other connections will be refused.
+
+Go ahead and try that same procedure on a server that you did not configure a specific user account for. You may have to install the client utilities as you did above:
+
+mysql -u wordpressuser -h database_server_IP -p
+This should not complete successfully. It should throw back an error that looks something like:
+
+ERROR 1130 (HY000): Host '11.111.111.111' is not allowed to connect to this MySQL server
+This is what we expect and what we want.
